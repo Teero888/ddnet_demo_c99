@@ -240,7 +240,7 @@ int main(int argc, char **argv) {
     printf("%02x", map_sha256[i]);
   printf("\n\n");
 
-  // 3. Create and begin writing the demo
+  // Create and begin writing the demo
   dd_demo_writer *writer = demo_w_create();
   FILE *f_demo = fopen(demo_filename, "wb");
   if (!writer || !f_demo) {
@@ -260,7 +260,7 @@ int main(int argc, char **argv) {
   for (int tick = 0; tick < demo_duration_ticks; ++tick) {
     demo_sb_clear(sb);
 
-    // Add Game World Objects
+    // Game World Objects
     dd_netobj_game_info *game_info = demo_sb_add_item(sb, DD_NETOBJTYPE_GAMEINFO, 0, sizeof(dd_netobj_game_info));
     game_info->m_RoundStartTick = 0;
     game_info->m_GameStateFlags = DD_GAMESTATEFLAG_RACETIME;
@@ -270,7 +270,7 @@ int main(int argc, char **argv) {
     game_info_ex->m_Flags = 0;
     game_info_ex->m_Flags2 = 0;
 
-    // Add Player-specific Objects
+    // Player-specific Objects
     for (int i = 0; i < num_players; ++i) {
       int start_x = 47.5 * 32 + i * 32;
       int start_y = 10.5 * 32;
@@ -325,7 +325,6 @@ int main(int argc, char **argv) {
       }
     }
 
-    // add a grenade for example
     for (int y = 50; y < 100; ++y)
       for (int x = 50; x < 100; ++x) {
         dd_netobj_ddnet_projectile *proj =
@@ -352,11 +351,9 @@ int main(int argc, char **argv) {
 
   printf("Wrote %d ticks of simulation for %d players.\n", demo_duration_ticks, num_players);
 
-  // Finalize the demo
   demo_w_finish(writer);
   printf("Demo file finalized.\n");
 
-  // Clean up
   free(map_data);
   demo_w_destroy(&writer);
   demo_sb_destroy(&sb);
