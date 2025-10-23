@@ -981,9 +981,9 @@ static void dd_str_timestamp(char *buffer, size_t buffer_size) {
  ******************************************************************************/
 void demo_msg_init(dd_msg_packer *packer, void *buffer, size_t buffer_size) {
   packer->error = false;
-  packer->start = (uint8_t*)buffer;
-  packer->current = (uint8_t*)buffer;
-  packer->end = (uint8_t*)buffer + buffer_size;
+  packer->start = (uint8_t *)buffer;
+  packer->current = (uint8_t *)buffer;
+  packer->end = (uint8_t *)buffer + buffer_size;
 }
 
 static uint8_t *dd_variable_int_pack(uint8_t *dst, int i, int dst_size);
@@ -1179,7 +1179,7 @@ static int dd_huffman_compress(const dd_huffman_state *state, const void *input,
       bits |= node->bits << bit_count;
       bit_count += node->num_bits;
       while (bit_count >= 8) {
-        if (dst + 1 > dst_end) return -1; 
+        if (dst + 1 > dst_end) return -1;
         *dst++ = bits & 0xff;
         bits >>= 8;
         bit_count -= 8;
