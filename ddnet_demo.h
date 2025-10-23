@@ -1,7 +1,7 @@
 /**
  * @file ddnet_demo.h
  * @brief A single-header C99 library for reading, writing, and creating DDNet 0.6 demo files.
- * @version 1.0
+ * @version 1.1
  *
  * To use this library, do this in one C file:
  * #define DDNET_DEMO_IMPLEMENTATION
@@ -34,6 +34,7 @@ extern "C" {
 #define DD_MAX_NETOBJSIZES 64
 #define DD_MAX_PAYLOAD (DD_MAX_SNAPSHOT_SIZE + 4096)
 #define DD_MAX_TYPE 0x7fff
+#define DD_MAX_MESSAGE_SIZE 1024
 
 /* Demo chunk types that can be returned by the reader */
 enum {
@@ -729,7 +730,7 @@ typedef struct {
 
 /******************************************************************************
  *
- * NETWORK MESSAGE STRUCTURES
+ * NETWORK MESSAGE STRUCTURES (NOT USED BY LIBRARY, FOR REFERENCE ONLY)
  *
  ******************************************************************************/
 typedef struct {
@@ -881,12 +882,28 @@ void demo_sb_clear(dd_snapshot_builder *sb);
 void *demo_sb_add_item(dd_snapshot_builder *sb, int type, int id, int size);
 int demo_sb_finish(dd_snapshot_builder *sb, void *snap_data);
 
+/*
+ * Message Packer API
+ */
+typedef struct {
+  uint8_t *start;
+  uint8_t *current;
+  uint8_t *end;
+  bool error;
+} dd_msg_packer;
+
+void demo_msg_init(dd_msg_packer *packer, void *buffer, size_t buffer_size);
+void demo_msg_add_int(dd_msg_packer *packer, int i);
+void demo_msg_add_string(dd_msg_packer *packer, const char *str);
+int demo_msg_finish(dd_msg_packer *packer);
+
 #ifdef __cplusplus
 }
 #endif
 
 #endif /* DDNET_DEMO_H */
 
+// #define DDNET_DEMO_IMPLEMENTATION
 #ifdef DDNET_DEMO_IMPLEMENTATION
 #undef DDNET_DEMO_IMPLEMENTATION
 
@@ -957,6 +974,53 @@ static void dd_str_timestamp(char *buffer, size_t buffer_size) {
     return;
   }
   strftime(buffer, buffer_size, "%Y-%m-%d %H-%M-%S", tmp);
+}
+
+/******************************************************************************
+ * MESSAGE PACKER IMPLEMENTATION
+ ******************************************************************************/
+void demo_msg_init(dd_msg_packer *packer, void *buffer, size_t buffer_size) {
+  packer->error = false;
+  packer->start = (uint8_t*)buffer;
+  packer->current = (uint8_t*)buffer;
+  packer->end = (uint8_t*)buffer + buffer_size;
+}
+
+static uint8_t *dd_variable_int_pack(uint8_t *dst, int i, int dst_size);
+void demo_msg_add_int(dd_msg_packer *packer, int i) {
+  if (packer->error) {
+    return;
+  }
+  uint8_t *p_next = dd_variable_int_pack(packer->current, i, packer->end - packer->current);
+  if (!p_next) {
+    packer->error = true;
+    return;
+  }
+  packer->current = p_next;
+}
+
+void demo_msg_add_string(dd_msg_packer *packer, const char *str) {
+  if (packer->error) {
+    return;
+  }
+  if (!str) {
+    str = "";
+  }
+
+  size_t len = strlen(str) + 1; // Include null terminator
+  if (packer->current + len > packer->end) {
+    packer->error = true;
+    return;
+  }
+  memcpy(packer->current, str, len);
+  packer->current += len;
+}
+
+int demo_msg_finish(dd_msg_packer *packer) {
+  if (packer->error) {
+    return -1;
+  }
+  return (int)((char *)packer->current - (char *)packer->start);
 }
 
 /******************************************************************************
@@ -1109,32 +1173,29 @@ static int dd_huffman_compress(const dd_huffman_state *state, const void *input,
   const uint8_t *dst_end = dst + output_size;
   uint32_t bits = 0;
   unsigned bit_count = 0;
-
   if (input_size) {
     while (input_size--) {
       const dd_huffman_node *node = &state->nodes[*src++];
       bits |= node->bits << bit_count;
       bit_count += node->num_bits;
       while (bit_count >= 8) {
-        if (dst >= dst_end) return -1;
+        if (dst + 1 > dst_end) return -1; 
         *dst++ = bits & 0xff;
         bits >>= 8;
         bit_count -= 8;
       }
     }
   }
-
   const dd_huffman_node *node = &state->nodes[DD_HUFFMAN_EOF_SYMBOL];
   bits |= node->bits << bit_count;
   bit_count += node->num_bits;
   while (bit_count >= 8) {
-    if (dst >= dst_end) return -1;
+    if (dst + 1 > dst_end) return -1;
     *dst++ = bits & 0xff;
     bits >>= 8;
     bit_count -= 8;
   }
-
-  if (dst >= dst_end) return -1;
+  if (dst + 1 > dst_end) return -1;
   *dst++ = bits;
   return (int)(dst - (uint8_t *)output);
 }
@@ -1186,7 +1247,6 @@ static int dd_huffman_decompress(const dd_huffman_state *state, const void *inpu
 
 static uint8_t *dd_variable_int_pack(uint8_t *dst, int i, int dst_size) {
   if (dst_size <= 0) return NULL;
-  dst_size--;
   *dst = 0;
   if (i < 0) {
     *dst |= 0x40;
@@ -1195,9 +1255,8 @@ static uint8_t *dd_variable_int_pack(uint8_t *dst, int i, int dst_size) {
   *dst |= i & 0x3F;
   i >>= 6;
   while (i) {
-    if (dst_size <= 0) return NULL;
+    if (--dst_size <= 0) return NULL;
     *dst |= 0x80;
-    dst_size--;
     dst++;
     *dst = i & 0x7F;
     i >>= 7;
@@ -1505,22 +1564,25 @@ static void demo_w_write_chunk_header(dd_demo_writer *dw, int type, int size) {
 static void demo_w_write_data(dd_demo_writer *dw, int type, const void *data, int size) {
   uint8_t compressed_buf[DD_MAX_PAYLOAD];
   uint8_t *padded_data = NULL;
-
+  int compressed_size = -1;
   int padded_size = size;
   if (size % 4 != 0) {
     padded_size = size + (4 - (size % 4));
   }
-
   padded_data = (uint8_t *)malloc(padded_size);
-  if (!padded_data) return;
+  if (!padded_data) {
+    fprintf(stderr, "Failed to allocate memory for padding.\n");
+    return;
+  }
   memcpy(padded_data, data, size);
   memset(padded_data + size, 0, padded_size - size);
-
-  int compressed_size = dd_data_compress(&dw->huffman, padded_data, padded_size, compressed_buf, sizeof(compressed_buf));
+  compressed_size = dd_data_compress(&dw->huffman, padded_data, padded_size, compressed_buf, sizeof(compressed_buf));
   free(padded_data);
 
-  if (compressed_size < 0) return;
-
+  if (compressed_size < 0) {
+    fprintf(stderr, "Demo data compression failed.\n");
+    return;
+  }
   demo_w_write_chunk_header(dw, type, compressed_size);
   fwrite(compressed_buf, compressed_size, 1, dw->file);
 }
@@ -1621,9 +1683,8 @@ bool demo_w_write_snap(dd_demo_writer *dw, int tick, const void *data, int size)
 }
 
 bool demo_w_write_msg(dd_demo_writer *dw, int tick, const void *data, int size) {
-  if (!dw || !dw->file) return false;
-  if (dw->last_tick_marker != tick) {
-    demo_w_write_tickmarker(dw, tick, false);
+  if (!dw || !dw->file) {
+    return false;
   }
   demo_w_write_data(dw, DD_CHUNKTYPE_MESSAGE, data, size);
   return true;

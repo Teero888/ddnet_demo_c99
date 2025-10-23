@@ -184,21 +184,26 @@ void str_to_ints(int *pInts, int num_ints, const char *pStr) {
 }
 
 void send_chat_message(dd_demo_writer *writer, int tick, int client_id, int team, const char *message) {
-  uint8_t msg_buffer[1024];
-  int *p_data = (int *)msg_buffer;
+  // Use a uint8_t buffer, as the packer now operates on bytes.
+  uint8_t msg_buffer[DD_MAX_MESSAGE_SIZE];
 
-  // The message payload must start with the message type ID
-  *p_data++ = DD_NETMSGTYPE_SV_CHAT;
-  *p_data++ = team;
-  *p_data++ = client_id;
+  // init the message packer
+  dd_msg_packer packer;
+  demo_msg_init(&packer, msg_buffer, sizeof(msg_buffer));
 
-  // Copy the string right after the integers
-  strcpy((char *)p_data, message);
+  // pack the message Id and its data
+  demo_msg_add_int(&packer, DD_NETMSGTYPE_SV_CHAT);
+  demo_msg_add_int(&packer, team);
+  demo_msg_add_int(&packer, client_id);
+  demo_msg_add_string(&packer, message);
 
-  // Calculate total size: 3 ints + string length + null terminator
-  int size = (sizeof(int) * 3) + strlen(message) + 1;
-
-  demo_w_write_msg(writer, tick, msg_buffer, size);
+  // finish packing to get the final size
+  int size = demo_msg_finish(&packer);
+  if (size > 0) {
+    // This will now pass the correctly packed data to the correct
+    // two-stage compression pipeline.
+    demo_w_write_msg(writer, tick, msg_buffer, size);
+  }
 }
 
 int main(int argc, char **argv) {
@@ -208,7 +213,7 @@ int main(int argc, char **argv) {
   }
 
   const char *map_filepath = argv[1];
-  const char *demo_filename = "generated_demo_full.demo";
+  const char *demo_filename = "generated.demo";
   const int num_players = 4;
   const int demo_duration_ticks = 1000; // 20 seconds
 
@@ -278,20 +283,6 @@ int main(int argc, char **argv) {
     demo_sb_clear(sb);
     int next_item_id = num_players;
 
-    // chat message examples
-    if (tick == 0) {
-      // server broadcast message at the start
-      send_chat_message(writer, tick, -1, 0, "*** Welcome to the demo! ***");
-    }
-    if (tick > 0 && tick % (DD_SERVER_TICK_SPEED * 5) == 0) {
-      // player 0 says something to everyone
-      send_chat_message(writer, tick, 0, 0, "Hello everyone!");
-    }
-    if (tick > 0 && tick % (DD_SERVER_TICK_SPEED * 8) == 0) {
-      // player 2 says something to their team (team 0)
-      send_chat_message(writer, tick, 2, 1, "Team message!");
-    }
-
     // Game Info (including extended version)
     dd_netobj_game_info *game_info = demo_sb_add_item(sb, DD_NETOBJTYPE_GAMEINFO, 0, sizeof(dd_netobj_game_info));
     if (game_info) {
@@ -299,7 +290,7 @@ int main(int argc, char **argv) {
       game_info->m_GameStateFlags = DD_GAMESTATEFLAG_RACETIME;
     }
 
-    // Adding an Ex object. The library now handles this automatically.
+    // Adding an Ex object.
     dd_netobj_game_info_ex *game_info_ex = demo_sb_add_item(sb, DD_NETOBJTYPE_GAMEINFOEX, 0, sizeof(dd_netobj_game_info_ex));
     if (game_info_ex) {
       game_info_ex->m_Version = 10;
@@ -381,14 +372,26 @@ int main(int argc, char **argv) {
           proj->m_TuneZone = 0;
         }
       }
-    }
-    if (tick % 100 == 0) {
+
+      for (int p = 0; p < 5; ++p) {
+        dd_netobj_ddnet_pickup *pick = demo_sb_add_item(sb, DD_NETOBJTYPE_DDNETPICKUP, next_item_id++, sizeof(dd_netobj_ddnet_pickup));
+        if (pick) {
+          float angle = (tick / 50.0f) + ((float)p / 5.f) * (2.0f * 3.14159265f);
+          pick->m_X = character->core.m_X + (int)(cosf(angle) * 32.0f) * 2;
+          pick->m_Y = character->core.m_Y + (int)(sinf(angle) * 32.0f) * 2;
+          pick->m_Type = DD_POWERUP_WEAPON;
+          pick->m_Subtype = DD_WEAPON_GRENADE;
+          pick->m_Flags = 0;
+          pick->m_SwitchNumber = 0;
+        }
+      }
     }
 
     int snap_size = demo_sb_finish(sb, snap_buf);
     if (snap_size > 0) {
       demo_w_write_snap(writer, tick, snap_buf, snap_size);
     }
+    send_chat_message(writer, tick, 0, 0, "HELLO WORLD");
   }
 
   printf("Wrote %d ticks of simulation.\n", demo_duration_ticks);
