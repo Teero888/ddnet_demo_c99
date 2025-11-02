@@ -4,9 +4,12 @@ project(ddnet_demo C)
 add_library(ddnet_demo INTERFACE)
 target_include_directories(ddnet_demo INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
-option(EXAMPLE "Build the example executable" OFF)
+option(EXAMPLES "Build the example executables" ON)
 
-if(EXAMPLE)
-    add_executable(example example.c ddnet_demo.c)
-    target_link_libraries(example PRIVATE m)
+if(EXAMPLES)
+    add_executable(example_write example_write.c)
+    target_link_libraries(example_write PRIVATE m)
+
+    add_executable(example_read example_read.c)
+    target_link_libraries(example_read PRIVATE m)
 endif()
