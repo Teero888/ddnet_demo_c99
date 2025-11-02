@@ -405,6 +405,7 @@ int main(int argc, char **argv) {
 
   demo_w_destroy(&writer);
   demo_sb_destroy(&sb);
+  fclose(f_demo);
 
   printf("\nSuccessfully created '%s'.\n", demo_filename);
 

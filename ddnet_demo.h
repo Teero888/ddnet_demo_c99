@@ -957,7 +957,10 @@ typedef struct {
 } dd_snap_delta;
 
 /* byte swapping utilities */
-static uint32_t dd_be_to_uint(const uint8_t *data) { return (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3]; }
+static uint32_t dd_be_to_uint(const uint8_t *data) {
+  uint32_t d0 = data[0], d1 = data[1], d2 = data[2], d3 = data[3];
+  return (d0 << 24) | (d1 << 16) | (d2 << 8) | d3;
+}
 static void dd_uint_to_be(uint8_t *data, uint32_t val) {
   data[0] = (val >> 24) & 0xFF;
   data[1] = (val >> 16) & 0xFF;
@@ -1716,7 +1719,7 @@ bool demo_w_finish(dd_demo_writer *dw) {
     fwrite(marker_be, sizeof(marker_be), 1, dw->file);
   }
 
-  fclose(dw->file);
+  // file handling should be done by the user
   dw->file = NULL;
   return true;
 }
@@ -1749,7 +1752,6 @@ dd_demo_reader *demo_r_create() {
 
 void demo_r_destroy(dd_demo_reader **dr_ptr) {
   if (dr_ptr && *dr_ptr) {
-    if ((*dr_ptr)->file) fclose((*dr_ptr)->file);
     free(*dr_ptr);
     *dr_ptr = NULL;
   }

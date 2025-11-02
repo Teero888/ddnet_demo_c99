@@ -3,5 +3,4 @@
 *.xml
 .history
 build/
-output.txt
 .cache
