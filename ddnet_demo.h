@@ -1871,45 +1871,72 @@ int demo_r_unpack_delta(dd_demo_reader *dr, const void *delta_data, int delta_si
   dd_snapshot_builder *sb = demo_sb_create();
 
   const int *deleted_items = delta->data;
+  const int *updated_items = deleted_items + delta->num_deleted_items;
 
+  // 1. Copy non-deleted and non-updated items from `from` snapshot
   for (int i = 0; i < from->num_items; i++) {
     const dd_snap_item *from_item = dd_snap_get_item(from, i);
-    bool keep = true;
+    bool is_deleted = false;
     for (int d = 0; d < delta->num_deleted_items; d++) {
       if (deleted_items[d] == dd_snap_item_key(from_item)) {
-        keep = false;
+        is_deleted = true;
         break;
       }
     }
-    if (keep) {
+    if (is_deleted) continue;
+
+    bool is_updated = false;
+    const int *p = updated_items;
+    for (int j = 0; j < delta->num_update_items; j++) {
+      int type = *p++;
+      int id = *p++;
+      int item_size;
+      if (type >= 0 && type < DD_MAX_NETOBJSIZES && dr->item_sizes[type]) {
+        item_size = dr->item_sizes[type];
+      } else {
+        item_size = (*p++) * sizeof(int);
+      }
+
+      if (dd_snap_item_type(from_item) == type && dd_snap_item_id(from_item) == id) {
+        is_updated = true;
+        break;
+      }
+      p += item_size / 4;
+    }
+
+    if (!is_updated) {
       int item_size = dd_snap_get_item_size(from, i);
       void *obj = demo_sb_add_item(sb, dd_snap_item_type(from_item), dd_snap_item_id(from_item), item_size);
       if (obj) memcpy(obj, dd_snap_item_data(from_item), item_size);
     }
   }
 
-  const int *updated_items = deleted_items + delta->num_deleted_items;
+  // 2. Add new and updated items from delta
+  const int *p = updated_items;
   for (int i = 0; i < delta->num_update_items; i++) {
-    int type = *updated_items++;
-    int id = *updated_items++;
+    int type = *p++;
+    int id = *p++;
     int item_size;
 
     if (type >= 0 && type < DD_MAX_NETOBJSIZES && dr->item_sizes[type]) {
       item_size = dr->item_sizes[type];
     } else {
-      item_size = (*updated_items++) * sizeof(int);
+      item_size = (*p++) * sizeof(int);
     }
 
     const dd_snap_item *from_item = dd_snap_find_item(from, type, id);
     void *new_data = demo_sb_add_item(sb, type, id, item_size);
-    if (!new_data) continue;
+    if (!new_data) {
+        p += item_size / 4;
+        continue;
+    }
 
     if (from_item) {
-      undiff_item(dd_snap_item_data(from_item), updated_items, (int *)new_data, item_size / 4);
+      undiff_item(dd_snap_item_data(from_item), p, (int *)new_data, item_size / 4);
     } else {
-      memcpy(new_data, updated_items, item_size);
+      memcpy(new_data, p, item_size);
     }
-    updated_items += item_size / 4;
+    p += item_size / 4;
   }
 
   int final_size = demo_sb_finish(sb, unpacked_snap_data);

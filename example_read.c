@@ -1,8 +1,18 @@
 #include <stdio.h>
-#include <stdlib.h>
 
 #define DDNET_DEMO_IMPLEMENTATION
 #include "ddnet_demo.h"
+
+void process_snapshot(const dd_snapshot *snap, int tick) {
+    printf("  Items in snapshot at tick %d:\n", tick);
+    for (int i = 0; i < snap->num_items; i++) {
+        const dd_snap_item *item = dd_snap_get_item(snap, i);
+        if (dd_snap_item_type(item) == DD_NETOBJTYPE_CHARACTER) {
+            const dd_netobj_character *character = (const dd_netobj_character *)dd_snap_item_data(item);
+            printf("    Character ID %d at (%d, %d)\n", dd_snap_item_id(item), character->core.m_X, character->core.m_Y);
+        }
+    }
+}
 
 int main(int argc, char **argv) {
     if (argc != 2) {
@@ -45,12 +55,14 @@ int main(int argc, char **argv) {
             break;
         case DD_CHUNK_SNAP:
             printf("Snapshot at tick %d, size %d\n", chunk.tick, chunk.size);
+            process_snapshot((const dd_snapshot *)chunk.data, chunk.tick);
             break;
         case DD_CHUNK_SNAP_DELTA:
             printf("Delta snapshot at tick %d, size %d\n", chunk.tick, chunk.size);
             int unpacked_size = demo_r_unpack_delta(dr, chunk.data, chunk.size, unpacked_snap);
             if (unpacked_size > 0) {
                 printf("  -> unpacked to %d bytes\n", unpacked_size);
+                process_snapshot((const dd_snapshot *)unpacked_snap, chunk.tick);
             } else {
                 printf("  -> failed to unpack delta\n");
             }
