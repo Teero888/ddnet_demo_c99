@@ -39,11 +39,12 @@ jobs:
           echo "Moving into build directory: ${{ env.BUILD_DIR }}"
           cd ${{ env.BUILD_DIR }}
           
+          pwd
+          echo "workspace dir is: ${{ github.workspace }}"
+          ls -l ${{ github.workspace }}
+
           echo "Running example_write..."
           ./example_write${{ env.EXEC_SUFFIX }} ${{ github.workspace }}/Aip-Gores.map
-          
-          echo "Listing files in build dir:"
-          ls -l
 
       - name: Run example_read and filter output
         shell: bash
