@@ -20,11 +20,9 @@ jobs:
         shell: bash
         run: |
           if [ "$RUNNER_OS" == "Windows" ]; then
-            echo "Detected Windows OS"
             echo "BUILD_DIR=build/Debug" >> $GITHUB_ENV
             echo "EXEC_SUFFIX=.exe" >> $GITHUB_ENV
           else
-            echo "Detected Unix-based OS"
             echo "BUILD_DIR=build" >> $GITHUB_ENV
             echo "EXEC_SUFFIX=" >> $GITHUB_ENV
           fi
@@ -41,12 +39,11 @@ jobs:
           echo "Moving into build directory: ${{ env.BUILD_DIR }}"
           cd ${{ env.BUILD_DIR }}
           
-          pwd
-          echo "workspace dir is: ${{ github.workspace }}"
-          ls -l "${{ github.workspace }}"
           echo "Running example_write..."
-          ls -l .
           ./example_write${{ env.EXEC_SUFFIX }} "${{ github.workspace }}/Aip-Gores.map"
+          
+          echo "Listing files in build dir:"
+          ls -l
 
       - name: Run example_read and filter output
         shell: bash
@@ -58,7 +55,7 @@ jobs:
           ./example_read${{ env.EXEC_SUFFIX }} generated.demo | grep -v "Timestamp:" > "${{ github.workspace }}/output.txt"
           
           echo "--- Captured Output ---"
-          cat ${{ github.workspace }}/output.txt
+          cat "${{ github.workspace }}/output.txt"
           echo "-----------------------"
           
       - name: Archive output
