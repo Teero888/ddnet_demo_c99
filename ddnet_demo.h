@@ -968,6 +968,12 @@ static void dd_uint_to_be(uint8_t *data, uint32_t val) {
   data[3] = val & 0xFF;
 }
 
+#if defined(_WIN32) || defined(_WIN64)
+#define dd_fseek _fseeki64
+#else
+#define dd_fseek fseeko
+#endif
+
 /* string utilities */
 static void dd_str_timestamp(char *buffer, size_t buffer_size) {
   time_t t = time(NULL);
@@ -1785,10 +1791,10 @@ bool demo_r_open(dd_demo_reader *dr, FILE *f) {
     dr->info.has_sha256 = fread(dr->info.map_sha256, 32, 1, f) == 1;
   } else {
     dr->info.has_sha256 = false;
-    fseek(f, -(long)read_bytes, SEEK_CUR);
+    dd_fseek(f, -(int64_t)read_bytes, SEEK_CUR);
   }
 
-  fseek(f, dr->info.map_size, SEEK_CUR);
+  dd_fseek(f, dr->info.map_size, SEEK_CUR);
 
   return true;
 }
@@ -1861,7 +1867,7 @@ bool demo_r_next_chunk(dd_demo_reader *dr, dd_demo_chunk *chunk) {
 
 static void undiff_item(const int *past, const int *diff, int *out, int size) {
   while (size--) {
-    *out++ = (unsigned int)*past++ + (unsigned int)*diff++;
+    *out++ = (uint32_t)*past++ + (uint32_t)*diff++;
   }
 }
 
