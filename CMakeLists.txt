@@ -11,5 +11,7 @@ if(EXAMPLES)
     target_link_libraries(example_write PRIVATE m)
 
     add_executable(example_read example_read.c)
-    target_link_libraries(example_read PRIVATE m)
+    if(UNIX)
+        target_link_libraries(example_read PRIVATE m)
+    endif()
 endif()
