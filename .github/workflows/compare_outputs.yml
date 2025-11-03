@@ -20,9 +20,11 @@ jobs:
         shell: bash
         run: |
           if [ "$RUNNER_OS" == "Windows" ]; then
+            echo "Detected Windows OS"
             echo "BUILD_DIR=build/Debug" >> $GITHUB_ENV
             echo "EXEC_SUFFIX=.exe" >> $GITHUB_ENV
           else
+            echo "Detected Unix-based OS"
             echo "BUILD_DIR=build" >> $GITHUB_ENV
             echo "EXEC_SUFFIX=" >> $GITHUB_ENV
           fi
