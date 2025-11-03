@@ -8,9 +8,9 @@ option(EXAMPLES "Build the example executables" ON)
 
 if(EXAMPLES)
     add_executable(example_write example_write.c)
+    if(UNIX)
+        target_link_libraries(example_write PRIVATE m)
+    endif()
 
     add_executable(example_read example_read.c)
-    if(UNIX)
-        target_link_libraries(example_read PRIVATE m)
-    endif()
 endif()
